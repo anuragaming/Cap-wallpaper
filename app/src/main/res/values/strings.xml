@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">SnapShare</string>
+    <string name="notification_channel_name">SnapShare Service</string>
+    <string name="notification_channel_desc">Duy trì nút chụp màn hình overlay</string>
+    <string name="service_running_title">SnapShare đang hoạt động</string>
+    <string name="service_running_text">Nhấn vào nút tròn trên màn hình để chụp ảnh màn hình</string>
+    <string name="action_stop">Dừng</string>
+    <string name="action_share">Chia sẻ</string>
+    <string name="action_delete">Xóa</string>
+    <string name="screenshot_captured">Đã chụp ảnh màn hình</string>
+    <string name="screenshot_captured_desc">Nhấn để xem hoặc chia sẻ ảnh tạm này</string>
+    <string name="permission_overlay_title">Quyền hiển thị trên ứng dụng khác</string>
+    <string name="permission_overlay_desc">SnapShare cần quyền vẽ trên ứng dụng khác để hiển thị nút camera overlay trên màn hình.</string>
+    <string name="permission_overlay_button">Cấp quyền Overlay</string>
+    <string name="permission_screen_capture_title">Quyền chụp màn hình</string>
+    <string name="permission_screen_capture_desc">Cấp quyền bắt đầu ghi hình màn hình để SnapShare có thể chụp lại nội dung khi bạn bấm nút.</string>
+    <string name="permission_screen_capture_button">Bắt đầu chụp màn hình</string>
+    <string name="permission_notification_title">Quyền thông báo</string>
+    <string name="permission_notification_desc">Cần quyền thông báo để duy trì dịch vụ chụp màn hình trong nền và gửi Sharesheet.</string>
+    <string name="share_screenshot_title">Chia sẻ ảnh chụp màn hình</string>
+    <string name="toast_screenshot_success">Đã chụp ảnh màn hình!</string>
+    <string name="toast_overlay_granted">Đã có quyền Overlay, tiếp tục cấp quyền chụp...</string>
+</resources>

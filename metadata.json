@@ -1,0 +1,6 @@
+{
+  "name": "SnapShare",
+  "description": "Chụp màn hình nhanh với nút floating overlay camera và chia sẻ tức thì.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
