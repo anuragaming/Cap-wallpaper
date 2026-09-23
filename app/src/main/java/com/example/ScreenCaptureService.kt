@@ -1,6 +1,5 @@
 package com.example
 
-import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -21,15 +20,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
-import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Display
-import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.MotionEvent
-import android.view.View
-import android.view.WindowManager
-import android.widget.ImageView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
@@ -37,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -68,16 +59,10 @@ class ScreenCaptureService : Service() {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var windowManager: WindowManager? = null
-    private var floatingView: View? = null
-    private var layoutParams: WindowManager.LayoutParams? = null
-
     private var mediaProjectionManager: MediaProjectionManager? = null
     private var mediaProjection: MediaProjection? = null
     private var imageReader: ImageReader? = null
     private var virtualDisplay: VirtualDisplay? = null
-
-    private var isCapturing = false
 
     private var imageHandlerThread: HandlerThread? = null
     private var imageHandler: Handler? = null
@@ -88,7 +73,6 @@ class ScreenCaptureService : Service() {
         super.onCreate()
         isRunning = true
         activeService = this
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         imageHandlerThread = HandlerThread("ImageReaderThread").apply { start() }
@@ -121,7 +105,6 @@ class ScreenCaptureService : Service() {
                 if (resultCode != 0 && data != null) {
                     startForegroundServiceWithNotification()
                     initMediaProjectionAndDisplay(resultCode, data)
-                    initFloatingOverlay()
                 } else {
                     stopSelf()
                 }
@@ -192,14 +175,12 @@ class ScreenCaptureService : Service() {
         try {
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
             imageReader?.setOnImageAvailableListener({ reader ->
-                // Keep the buffer queue unblocked when not actively grabbing
-                if (!isCapturing) {
-                    try {
-                        val img = reader.acquireLatestImage()
-                        img?.close()
-                    } catch (e: Exception) {
-                        // ignore
-                    }
+                // Drain any non-needed frames to keep the reader active
+                try {
+                    val img = reader.acquireLatestImage()
+                    img?.close()
+                } catch (e: Exception) {
+                    // ignore
                 }
             }, imageHandler)
 
@@ -232,159 +213,6 @@ class ScreenCaptureService : Service() {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility", "InflateParams")
-    private fun initFloatingOverlay() {
-        if (!Settings.canDrawOverlays(this)) {
-            // Overlay is optional when user prefers clicking app icon
-            return
-        }
-
-        if (floatingView != null) return
-
-        val inflater = LayoutInflater.from(this)
-        floatingView = inflater.inflate(R.layout.layout_floating_widget, null)
-
-        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 300
-        }
-        layoutParams = params
-
-        val captureButton = floatingView?.findViewById<ImageView>(R.id.btn_floating_capture)
-
-        floatingView?.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
-            private var initialTouchX = 0f
-            private var initialTouchY = 0f
-            private var touchStartTime = 0L
-
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                val currentParams = layoutParams ?: return false
-
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = currentParams.x
-                        initialY = currentParams.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        touchStartTime = System.currentTimeMillis()
-                        captureButton?.animate()?.scaleX(0.92f)?.scaleY(0.92f)?.setDuration(100)?.start()
-                        return true
-                    }
-
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = (event.rawX - initialTouchX).toInt()
-                        val dy = (event.rawY - initialTouchY).toInt()
-                        currentParams.x = initialX + dx
-                        currentParams.y = initialY + dy
-                        try {
-                            windowManager?.updateViewLayout(floatingView, currentParams)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        return true
-                    }
-
-                    MotionEvent.ACTION_UP -> {
-                        captureButton?.animate()?.scaleX(1.0f)?.scaleY(1.0f)?.setDuration(150)?.start()
-
-                        val dx = Math.abs(event.rawX - initialTouchX)
-                        val dy = Math.abs(event.rawY - initialTouchY)
-                        val duration = System.currentTimeMillis() - touchStartTime
-                        val clickThreshold = 15 * resources.displayMetrics.density
-
-                        if (dx < clickThreshold && dy < clickThreshold && duration < 350) {
-                            // Tap event triggered
-                            triggerScreenCapture()
-                        }
-                        return true
-                    }
-
-                    MotionEvent.ACTION_CANCEL -> {
-                        captureButton?.animate()?.scaleX(1.0f)?.scaleY(1.0f)?.setDuration(150)?.start()
-                        return true
-                    }
-                }
-                return false
-            }
-        })
-
-        try {
-            windowManager?.addView(floatingView, params)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun triggerScreenCapture() {
-        if (isCapturing) return
-        val reader = imageReader
-        if (reader == null || mediaProjection == null) {
-            Toast.makeText(this, "Dịch vụ chụp chưa sẵn sàng", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        isCapturing = true
-
-        serviceScope.launch {
-            try {
-                // 1. Hide overlay to avoid capturing it
-                floatingView?.visibility = View.INVISIBLE
-
-                // 2. Allow display pipeline to draw the screen without the overlay
-                delay(100)
-
-                // 3. Acquire frame from the active ImageReader
-                val bitmap = withContext(Dispatchers.Default) {
-                    extractBitmapFromReader(reader)
-                }
-
-                // 4. Restore overlay immediately
-                floatingView?.visibility = View.VISIBLE
-
-                if (bitmap != null) {
-                    // Save bitmap to cache directory
-                    val file = withContext(Dispatchers.IO) {
-                        FileHelper.saveBitmapToCache(applicationContext, bitmap)
-                    }
-
-                    if (file != null) {
-                        // Launch trampoline activity to copy directly to clipboard
-                        copyToClipboardViaActivity(file)
-
-                        // Show notification with preview
-                        showScreenshotNotification(file, bitmap)
-                    } else {
-                        Toast.makeText(applicationContext, "Lỗi khi lưu ảnh tạm", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(applicationContext, "Không thể lấy hình ảnh màn hình", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                floatingView?.visibility = View.VISIBLE
-            } finally {
-                isCapturing = false
-            }
-        }
-    }
-
     suspend fun captureFrame(): Bitmap? {
         val reader = imageReader ?: return null
         return withContext(Dispatchers.Default) {
@@ -394,14 +222,14 @@ class ScreenCaptureService : Service() {
 
     private suspend fun extractBitmapFromReader(reader: ImageReader): Bitmap? {
         var image: Image? = null
-        for (attempt in 1..5) {
+        for (attempt in 1..8) {
             try {
                 image = reader.acquireLatestImage()
                 if (image != null) break
             } catch (e: Exception) {
-                // Wait brief interval and retry
+                // Retry if buffer not ready
             }
-            delay(50)
+            delay(40)
         }
 
         if (image == null) return null
@@ -467,18 +295,10 @@ class ScreenCaptureService : Service() {
         return Triple(width, height, densityDpi)
     }
 
-    private fun copyToClipboardViaActivity(file: File) {
-        val shareIntent = Intent(this, ShareActivity::class.java).apply {
-            putExtra(ShareActivity.EXTRA_FILE_PATH, file.absolutePath)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        startActivity(shareIntent)
-    }
-
-    private fun showScreenshotNotification(file: File, bitmap: Bitmap) {
+    fun showScreenshotNotification(file: File, bitmap: Bitmap) {
         val notificationId = (System.currentTimeMillis() % 100000).toInt()
 
-        // Action 1: Copy to clipboard again if needed
+        // Action 1: Copy to clipboard shortcut
         val copyIntent = Intent(this, ShareActivity::class.java).apply {
             putExtra(ShareActivity.EXTRA_FILE_PATH, file.absolutePath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -503,7 +323,6 @@ class ScreenCaptureService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Scaled preview for notification
         val previewBitmap = try {
             val maxDimension = 512
             val width = bitmap.width
@@ -597,15 +416,6 @@ class ScreenCaptureService : Service() {
             activeService = null
         }
         serviceScope.cancel()
-
-        floatingView?.let {
-            try {
-                windowManager?.removeView(it)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            floatingView = null
-        }
 
         cleanupProjection()
 

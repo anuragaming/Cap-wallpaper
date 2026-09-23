@@ -10,13 +10,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -64,12 +63,6 @@ class MainActivity : ComponentActivity() {
     private val notificationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
-        checkOverlayAndLaunchProjection()
-    }
-
-    private val overlaySettingsLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
         launchMediaProjectionPrompt()
     }
 
@@ -80,7 +73,7 @@ class MainActivity : ComponentActivity() {
             showPermissionCard = false
             startServiceAndCapture(result.resultCode, result.data!!)
         } else {
-            permissionMessage = "Cần cấp quyền chụp màn hình để SnapShare có thể chụp và copy ảnh."
+            permissionMessage = "Cần cấp quyền chụp màn hình để SnapShare có thể chụp và copy ảnh ngay khi chạm vào app."
             showPermissionCard = true
         }
     }
@@ -114,18 +107,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            checkOverlayAndLaunchProjection()
-        }
-    }
-
-    private fun checkOverlayAndLaunchProjection() {
-        if (!Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            overlaySettingsLauncher.launch(intent)
         } else {
             launchMediaProjectionPrompt()
         }
@@ -163,10 +144,10 @@ class MainActivity : ComponentActivity() {
             // Wait for service to initialize VirtualDisplay
             var waited = 0
             while (ScreenCaptureService.activeService == null && waited < 1500) {
-                delay(60)
-                waited += 60
+                delay(50)
+                waited += 50
             }
-            delay(120)
+            delay(100)
             performInstantCaptureAndFinish()
         }
     }
@@ -174,7 +155,7 @@ class MainActivity : ComponentActivity() {
     private fun performInstantCaptureAndFinish() {
         lifecycleScope.launch {
             // Allow transient window transition to settle
-            delay(60)
+            delay(80)
 
             val service = ScreenCaptureService.activeService
             val bitmap = service?.captureFrame()
@@ -186,6 +167,7 @@ class MainActivity : ComponentActivity() {
 
                 if (file != null) {
                     copyFileToClipboard(file)
+                    service.showScreenshotNotification(file, bitmap)
                 } else {
                     Toast.makeText(applicationContext, "Lỗi khi lưu ảnh tạm", Toast.LENGTH_SHORT).show()
                 }
@@ -245,7 +227,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun PermissionPromptScreen(
     message: String = "",
     onGrantClick: () -> Unit = {}
@@ -289,4 +271,3 @@ fun PermissionPromptScreen(
         }
     }
 }
-
