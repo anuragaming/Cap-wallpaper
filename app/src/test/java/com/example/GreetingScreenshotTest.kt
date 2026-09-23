@@ -23,13 +23,8 @@ class GreetingScreenshotTest {
   fun setup_screen_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        SetupScreen(
-          isServiceRunning = false,
-          hasOverlayPermission = true,
-          onRequestOverlayPermission = {},
-          onRequestProjection = {},
-          onStopService = {},
-          onMinimize = {}
+        PermissionPromptScreen(
+          message = "Chạm vào icon ứng dụng để chụp và copy ảnh trực tiếp vào bàn phím."
         )
       }
     }

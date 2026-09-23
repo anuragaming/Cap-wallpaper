@@ -1,90 +1,91 @@
 package com.example
 
-import android.app.PendingIntent
-import android.content.Intent
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.widget.Toast
 import java.io.File
 
-class ShareActivity : ComponentActivity() {
+class ShareActivity : Activity() {
 
     companion object {
         const val EXTRA_FILE_PATH = "extra_file_path"
-    }
-
-    private var filePath: String? = null
-
-    private val shareLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        // When the user dismisses or finishes the Sharesheet
-        scheduleFileCleanup()
-        finish()
+        const val EXTRA_URI_STRING = "extra_uri_string"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        filePath = intent.getStringExtra(EXTRA_FILE_PATH)
-        if (filePath.isNullOrEmpty()) {
-            finish()
-            return
+        val uriString = intent.getStringExtra(EXTRA_URI_STRING)
+        val filePath = intent.getStringExtra(EXTRA_FILE_PATH)
+
+        val targetUri: Uri? = when {
+            !uriString.isNullOrEmpty() -> Uri.parse(uriString)
+            !filePath.isNullOrEmpty() -> {
+                val file = File(filePath)
+                if (file.exists()) FileHelper.getFileUri(this, file) else null
+            }
+            else -> null
         }
 
-        val file = File(filePath!!)
-        if (!file.exists()) {
-            finish()
-            return
+        if (targetUri != null) {
+            copyImageToClipboard(targetUri)
         }
 
+        finish()
+    }
+
+    private fun copyImageToClipboard(uri: Uri) {
         try {
-            val uri: Uri = FileHelper.getFileUri(this, file)
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clipData = ClipData(
+                ClipDescription(getString(R.string.clipboard_label), arrayOf("image/png")),
+                ClipData.Item(uri)
+            )
+            clipboard.setPrimaryClip(clipData)
 
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-
-            val callbackIntent = Intent(this, ShareBroadcastReceiver::class.java).apply {
-                action = ShareBroadcastReceiver.ACTION_SHARE_CALLBACK
-                putExtra(ShareBroadcastReceiver.EXTRA_FILE_PATH, filePath)
-            }
-
-            val pendingIntent = PendingIntent.getBroadcast(
+            triggerHapticFeedback()
+            Toast.makeText(
                 this,
-                (System.currentTimeMillis() % 10000).toInt(),
-                callbackIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            )
-
-            val chooser = Intent.createChooser(
-                shareIntent,
-                getString(R.string.share_screenshot_title),
-                pendingIntent.intentSender
-            )
-
-            shareLauncher.launch(chooser)
+                getString(R.string.toast_copied_to_clipboard),
+                Toast.LENGTH_SHORT
+            ).show()
         } catch (e: Exception) {
             e.printStackTrace()
-            finish()
+            Toast.makeText(this, "Lỗi sao chép vào bộ nhớ tạm: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun scheduleFileCleanup() {
-        val path = filePath ?: return
-        // Give 5 seconds for receiving apps (e.g. Messaging, Drive) to finish reading stream
-        Handler(Looper.getMainLooper()).postDelayed({
-            FileHelper.deleteFilePath(applicationContext, path)
-        }, 5000L)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        scheduleFileCleanup()
+    private fun triggerHapticFeedback() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager =
+                    getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(
+                    VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(
+                        VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(40)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

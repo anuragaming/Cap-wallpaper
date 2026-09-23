@@ -21,9 +21,6 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Display
@@ -59,6 +56,9 @@ class ScreenCaptureService : Service() {
         var isRunning = false
             private set
 
+        var activeService: ScreenCaptureService? = null
+            private set
+
         fun stopService(context: Context) {
             val intent = Intent(context, ScreenCaptureService::class.java).apply {
                 action = ACTION_STOP
@@ -87,6 +87,7 @@ class ScreenCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        activeService = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
@@ -191,7 +192,7 @@ class ScreenCaptureService : Service() {
         try {
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
             imageReader?.setOnImageAvailableListener({ reader ->
-                // Keep the buffer queue unblocked when not capturing
+                // Keep the buffer queue unblocked when not actively grabbing
                 if (!isCapturing) {
                     try {
                         val img = reader.acquireLatestImage()
@@ -234,8 +235,7 @@ class ScreenCaptureService : Service() {
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
     private fun initFloatingOverlay() {
         if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "Thiếu quyền vẽ overlay", Toast.LENGTH_SHORT).show()
-            stopSelf()
+            // Overlay is optional when user prefers clicking app icon
             return
         }
 
@@ -332,7 +332,7 @@ class ScreenCaptureService : Service() {
         }
     }
 
-    private fun triggerScreenCapture() {
+    fun triggerScreenCapture() {
         if (isCapturing) return
         val reader = imageReader
         if (reader == null || mediaProjection == null) {
@@ -344,7 +344,7 @@ class ScreenCaptureService : Service() {
 
         serviceScope.launch {
             try {
-                // 1. Hide overlay to prevent it from appearing in the screenshot
+                // 1. Hide overlay to avoid capturing it
                 floatingView?.visibility = View.INVISIBLE
 
                 // 2. Allow display pipeline to draw the screen without the overlay
@@ -359,20 +359,17 @@ class ScreenCaptureService : Service() {
                 floatingView?.visibility = View.VISIBLE
 
                 if (bitmap != null) {
-                    // Provide haptic feedback
-                    triggerHapticFeedback()
-
                     // Save bitmap to cache directory
                     val file = withContext(Dispatchers.IO) {
                         FileHelper.saveBitmapToCache(applicationContext, bitmap)
                     }
 
                     if (file != null) {
-                        // Show notification with preview and share/delete options
-                        showScreenshotNotification(file, bitmap)
+                        // Launch trampoline activity to copy directly to clipboard
+                        copyToClipboardViaActivity(file)
 
-                        // Immediately launch the Android Sharesheet
-                        launchSharesheet(file)
+                        // Show notification with preview
+                        showScreenshotNotification(file, bitmap)
                     } else {
                         Toast.makeText(applicationContext, "Lỗi khi lưu ảnh tạm", Toast.LENGTH_SHORT).show()
                     }
@@ -385,6 +382,13 @@ class ScreenCaptureService : Service() {
             } finally {
                 isCapturing = false
             }
+        }
+    }
+
+    suspend fun captureFrame(): Bitmap? {
+        val reader = imageReader ?: return null
+        return withContext(Dispatchers.Default) {
+            extractBitmapFromReader(reader)
         }
     }
 
@@ -463,43 +467,26 @@ class ScreenCaptureService : Service() {
         return Triple(width, height, densityDpi)
     }
 
-    private fun triggerHapticFeedback() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager =
-                    getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(
-                        VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(40)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    private fun copyToClipboardViaActivity(file: File) {
+        val shareIntent = Intent(this, ShareActivity::class.java).apply {
+            putExtra(ShareActivity.EXTRA_FILE_PATH, file.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
+        startActivity(shareIntent)
     }
 
     private fun showScreenshotNotification(file: File, bitmap: Bitmap) {
         val notificationId = (System.currentTimeMillis() % 100000).toInt()
 
-        // Action 1: Share
-        val shareIntent = Intent(this, ShareActivity::class.java).apply {
+        // Action 1: Copy to clipboard again if needed
+        val copyIntent = Intent(this, ShareActivity::class.java).apply {
             putExtra(ShareActivity.EXTRA_FILE_PATH, file.absolutePath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        val sharePendingIntent = PendingIntent.getActivity(
+        val copyPendingIntent = PendingIntent.getActivity(
             this,
             notificationId + 1,
-            shareIntent,
+            copyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -544,22 +531,13 @@ class ScreenCaptureService : Service() {
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setContentIntent(sharePendingIntent)
-            .addAction(R.drawable.ic_share, getString(R.string.action_share), sharePendingIntent)
+            .setContentIntent(copyPendingIntent)
             .addAction(R.drawable.ic_close, getString(R.string.action_delete), deletePendingIntent)
             .build()
 
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, notification)
-    }
-
-    private fun launchSharesheet(file: File) {
-        val shareIntent = Intent(this, ShareActivity::class.java).apply {
-            putExtra(ShareActivity.EXTRA_FILE_PATH, file.absolutePath)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        startActivity(shareIntent)
     }
 
     private fun createNotificationChannels() {
@@ -615,6 +593,9 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        if (activeService == this) {
+            activeService = null
+        }
         serviceScope.cancel()
 
         floatingView?.let {
