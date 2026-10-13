@@ -1,15 +1,16 @@
 package com.example.ui.components
 
 import android.content.Context
+import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.View
 import android.webkit.WebView
 
 /**
  * Hardened WebView that overrides low-level Android View visibility and focus callbacks.
- * When isShieldActive is true, it prevents the underlying Chromium C++ engine from ever
- * learning that the window was minimized, hidden, or lost focus.
- * This ensures Chromium never fires native visibilitychange or blur events, and never pauses timers.
+ * Configured with isFocusable = true, isFocusableInTouchMode = true,
+ * ensuring touch keyboard (IME) input works seamlessly when tapping inputs, while keeping
+ * background protection active.
  */
 class AntiReturnWebView @JvmOverloads constructor(
     context: Context,
@@ -18,6 +19,19 @@ class AntiReturnWebView @JvmOverloads constructor(
 ) : WebView(context, attrs, defStyleAttr) {
 
     var isShieldActive: Boolean = true
+
+    init {
+        isFocusable = true
+        isFocusableInTouchMode = true
+    }
+
+    override fun onCheckIsTextEditor(): Boolean {
+        return true
+    }
+
+    override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        return super.requestFocus(direction, previouslyFocusedRect)
+    }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         if (isShieldActive) {

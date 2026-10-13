@@ -12,6 +12,9 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.os.Message
+import android.view.MotionEvent
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -22,6 +25,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.data.local.HistoryEntry
+import com.example.ui.components.HistorySheet
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.History
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -169,6 +176,12 @@ fun BrowserScreen(
     onCloseGoogleLens: () -> Unit = {},
     onGoogleLensTabSelected: (String) -> Unit = {},
     onExecuteLensAction: (Context, String) -> Unit = { _, _ -> },
+    isHistoryOpen: Boolean = false,
+    historyList: List<HistoryEntry> = emptyList(),
+    onOpenHistory: () -> Unit = {},
+    onCloseHistory: () -> Unit = {},
+    onDeleteHistoryEntry: (HistoryEntry) -> Unit = {},
+    onClearAllHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -490,6 +503,24 @@ fun BrowserScreen(
                                 }
                             )
 
+                            DropdownMenuItem(
+                                text = { Text("🕒 Lịch sử web", color = TextPrimary) },
+                                leadingIcon = { Icon(Icons.Default.History, null, tint = TextSecondary) },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenHistory()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("👤 Đăng nhập Google", color = Color(0xFF60A5FA), fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = { Icon(Icons.Default.AccountCircle, null, tint = Color(0xFF60A5FA)) },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigate("https://accounts.google.com")
+                                }
+                            )
+
                             HorizontalDivider(color = Color(0xFF374151), modifier = Modifier.padding(vertical = 4.dp))
 
                             DropdownMenuItem(
@@ -630,12 +661,33 @@ fun BrowserScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
 
+                            // Essential for soft keyboard (IME) input when user taps web input fields
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            setOnTouchListener { v, event ->
+                                when (event.action) {
+                                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP -> {
+                                        if (!v.hasFocus()) {
+                                            v.requestFocus()
+                                        }
+                                    }
+                                }
+                                false
+                            }
+
                             // Hardware GPU acceleration enabled for 60-120fps smooth scrolling
                             setLayerType(View.LAYER_TYPE_NONE, null)
+
+                            // Clean Chrome User-Agent (stripping ; wv and Version/X to allow Google login without disallowed_useragent)
+                            val baseUa = WebSettings.getDefaultUserAgent(ctx)
+                            val cleanChromeUa = baseUa
+                                .replace("; wv", "")
+                                .replace(Regex("Version/[0-9.]+ "), "")
 
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
+                                databaseEnabled = true
                                 useWideViewPort = true
                                 loadWithOverviewMode = true
                                 builtInZoomControls = true
@@ -643,7 +695,15 @@ fun BrowserScreen(
                                 mediaPlaybackRequiresUserGesture = false
                                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                                 cacheMode = if (isIncognito) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
+                                javaScriptCanOpenWindowsAutomatically = true
+                                setSupportMultipleWindows(true)
+                                userAgentString = cleanChromeUa
                             }
+
+                            // Enable & synchronize cookies like Chrome
+                            val cookieManager = CookieManager.getInstance()
+                            cookieManager.setAcceptCookie(true)
+                            cookieManager.setAcceptThirdPartyCookies(this, true)
 
                             // Anti-Return monitoring JS interface
                             addJavascriptInterface(
@@ -704,6 +764,9 @@ fun BrowserScreen(
                                         view?.canGoForward() == true
                                     )
 
+                                    // Persist cookies to disk
+                                    CookieManager.getInstance().flush()
+
                                     if (config.isMasterShieldEnabled) {
                                         val script = AntiReturnScriptEngine.buildInjectionScript(config)
                                         view?.evaluateJavascript(script, null)
@@ -728,7 +791,7 @@ fun BrowserScreen(
                                             ConsoleMessage.MessageLevel.WARNING -> "WARN"
                                             ConsoleMessage.MessageLevel.TIP -> "INFO"
                                             else -> "LOG"
-                                        }
+                                         }
                                         onAddConsoleLog(level, msg.message(), msg.sourceId() ?: "")
                                     }
                                     return super.onConsoleMessage(consoleMessage)
@@ -736,6 +799,35 @@ fun BrowserScreen(
 
                                 override fun onReceivedTitle(view: WebView?, title: String?) {
                                     super.onReceivedTitle(view, title)
+                                }
+
+                                // Handle Google login popup windows & multiple window popups seamlessly in tab
+                                override fun onCreateWindow(
+                                    view: WebView?,
+                                    isDialog: Boolean,
+                                    isUserGesture: Boolean,
+                                    resultMsg: Message?
+                                ): Boolean {
+                                    val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                    val tempWv = WebView(ctx).apply {
+                                        webViewClient = object : WebViewClient() {
+                                            override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                                                request?.url?.toString()?.let { url ->
+                                                    view?.loadUrl(url)
+                                                }
+                                                return true
+                                            }
+
+                                            override fun onPageStarted(v: WebView?, url: String?, favicon: Bitmap?) {
+                                                if (url != null) {
+                                                    view?.loadUrl(url)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    transport.webView = tempWv
+                                    resultMsg.sendToTarget()
+                                    return true
                                 }
                             }
 
@@ -747,12 +839,16 @@ fun BrowserScreen(
                         webViewRef = webView
                         (webView as? AntiReturnWebView)?.isShieldActive = config.isMasterShieldEnabled
 
-                        val defaultUa = WebSettings.getDefaultUserAgent(context)
+                        val baseUa = WebSettings.getDefaultUserAgent(context)
+                        val cleanChromeUa = baseUa
+                            .replace("; wv", "")
+                            .replace(Regex("Version/[0-9.]+ "), "")
+
                         if (config.isDesktopMode) {
                             webView.settings.userAgentString =
                                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         } else {
-                            webView.settings.userAgentString = defaultUa
+                            webView.settings.userAgentString = cleanChromeUa
                         }
 
                         if (webView.url != currentUrl && !isLoading) {
@@ -941,6 +1037,18 @@ fun BrowserScreen(
             onGeminiPromptChanged(text)
             onSetGeminiOverlayOpen(true)
         }
+    )
+
+    // ==========================================
+    // 7. CHROME WEB BROWSING HISTORY SHEET
+    // ==========================================
+    HistorySheet(
+        isOpen = isHistoryOpen,
+        historyList = historyList,
+        onDismiss = onCloseHistory,
+        onNavigateToUrl = onNavigate,
+        onDeleteEntry = onDeleteHistoryEntry,
+        onClearAllHistory = onClearAllHistory
     )
 }
 

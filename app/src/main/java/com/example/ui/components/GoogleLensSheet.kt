@@ -113,8 +113,12 @@ fun GoogleLensSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
-    var showApiKeySection by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf(GeminiSolverService.getApiKey(context)) }
+    val isKeyConfigured = remember(apiKeyInput) {
+        val k = GeminiSolverService.getApiKey(context)
+        k.isNotBlank() && k != "MY_GEMINI_API_KEY"
+    }
+    var showApiKeySection by remember { mutableStateOf(!isKeyConfigured) }
     var currentModel by remember { mutableStateOf(GeminiSolverService.getSelectedModel(context)) }
     var showExternalAppsSection by remember { mutableStateOf(false) }
 
@@ -134,7 +138,22 @@ fun GoogleLensSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Color(0xFF0F172A),
-        dragHandle = null,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0xFF64748B))
+                )
+            }
+        },
         modifier = modifier.fillMaxHeight(0.92f)
     ) {
         Column(
@@ -317,40 +336,127 @@ fun GoogleLensSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = Color(0xFF1E293B),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            // Section header
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "🔑 Cấu hình Gemini API Key",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Free từ Google",
-                                    color = Color(0xFF38BDF8),
-                                    fontSize = 11.sp
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "AI Giải Bài Tự Động Trong Web",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Surface(
+                                    color = Color(0x3310B981),
+                                    shape = RoundedCornerShape(4.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
+                                ) {
+                                    Text(
+                                        text = "1500 lượt/ngày Free",
+                                        color = Color(0xFF34D399),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
 
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Explanation about Android sandbox & why external app cannot be controlled in background
+                            Surface(
+                                color = Color(0xFF0F172A),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = "💡 Vì sao không dùng app Gemini trên máy?",
+                                        color = Color(0xFFFBBF24),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = "Android chặn các app bên ngoài điều khiển ngầm app Gemini vì bảo mật. Nếu mở app Gemini thì bạn sẽ bị thoát khỏi web (dễ bị phát hiện rời tab kiểm tra). Do đó app tích hợp AI trực tiếp để giải ngay trên màn hình!",
+                                        color = TextSecondary,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             Text(
-                                text = "Lấy key hoàn toàn miễn phí tại aistudio.google.com/apikey rồi dán vào đây để sử dụng AI trực tiếp:",
-                                color = TextSecondary,
+                                text = "Lấy mã Key miễn phí của Google (chỉ mất 20 giây, dùng vĩnh viễn):",
+                                color = TextPrimary,
                                 fontSize = 11.sp,
-                                modifier = Modifier.padding(vertical = 4.dp)
+                                fontWeight = FontWeight.Medium
                             )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Action buttons: Open AI Studio to get key & paste
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        onOpenInBrowserTab("https://aistudio.google.com/apikey")
+                                        Toast.makeText(context, "Đang mở trang tạo Key miễn phí...", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("🔑 Lấy Key Free (1-Click)", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: ""
+                                if (clipText.startsWith("AIzaSy")) {
+                                    Button(
+                                        onClick = {
+                                            apiKeyInput = clipText
+                                            GeminiSolverService.saveCustomApiKey(context, clipText)
+                                            Toast.makeText(context, "Đã dán và lưu Key thành công!", Toast.LENGTH_SHORT).show()
+                                            showApiKeySection = false
+                                            onExecuteAction(context, activeTab)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("📋 Dán nhanh Key", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             OutlinedTextField(
                                 value = apiKeyInput,
                                 onValueChange = { apiKeyInput = it },
-                                placeholder = { Text("Dán API Key (AIzaSy...)", color = TextMuted, fontSize = 11.sp) },
+                                placeholder = { Text("Dán API Key tại đây (bắt đầu bằng AIzaSy...)", color = TextMuted, fontSize = 11.sp) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -369,17 +475,67 @@ fun GoogleLensSheet(
                             ) {
                                 Button(
                                     onClick = {
-                                        GeminiSolverService.saveCustomApiKey(context, apiKeyInput.trim())
-                                        Toast.makeText(context, "Đã lưu API Key thành công!", Toast.LENGTH_SHORT).show()
-                                        showApiKeySection = false
-                                        // Execute immediately with new key
-                                        onExecuteAction(context, activeTab)
+                                        if (apiKeyInput.isNotBlank()) {
+                                            GeminiSolverService.saveCustomApiKey(context, apiKeyInput.trim())
+                                            Toast.makeText(context, "Đã lưu API Key thành công!", Toast.LENGTH_SHORT).show()
+                                            showApiKeySection = false
+                                            onExecuteAction(context, activeTab)
+                                        } else {
+                                            Toast.makeText(context, "Vui lòng nhập API Key", Toast.LENGTH_SHORT).show()
+                                        }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
-                                    Text("Lưu & Dùng Ngay", color = CyberDarkNavy, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("Lưu & Giải Bài Ngay", color = CyberDarkNavy, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                 }
+                            }
+
+                            // 100% Free fallback: Search directly without any key
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "🌟 Hoặc dùng ngay Lời Giải Miễn Phí (Không cần Key):",
+                                color = Color(0xFFFBBF24),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Button(
+                                onClick = {
+                                    webView?.evaluateJavascript(
+                                        """
+                                        (function() {
+                                            var sel = window.getSelection().toString().trim();
+                                            if (sel.length > 5) return sel;
+                                            var q = document.querySelector('.question, .de-bai, .cau-hoi, article, main, h1, h2, p');
+                                            return q ? q.innerText.trim() : document.body.innerText.substring(0, 300);
+                                        })();
+                                        """.trimIndent()
+                                    ) { res ->
+                                        val clean = res?.removePrefix("\"")?.removeSuffix("\"")?.replace("\\n", " ")?.replace("\\\"", "\"")?.trim() ?: ""
+                                        if (clean.isNotBlank() && clean != "null") {
+                                            val query = clean.take(120)
+                                            onOpenInBrowserTab("https://www.google.com/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}")
+                                            onDismiss()
+                                        } else {
+                                            onOpenInBrowserTab("https://www.google.com/search?q=giai+bai+tap+online")
+                                            onDismiss()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Search, null, tint = Color(0xFF34D399), modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("⚡ Quét Đề Bài & Tìm Lời Giải Google Ngay", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -621,12 +777,48 @@ fun GoogleLensSheet(
                                     )
                                     if (err.contains("API Key", ignoreCase = true)) {
                                         Spacer(modifier = Modifier.height(6.dp))
-                                        Button(
-                                            onClick = { showApiKeySection = true },
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                                            shape = RoundedCornerShape(4.dp)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            Text("Nhập API Key ngay", color = Color.White, fontSize = 11.sp)
+                                            Button(
+                                                onClick = { showApiKeySection = true },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                                shape = RoundedCornerShape(4.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text("Nhập Key Free", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    webView?.evaluateJavascript(
+                                                        """
+                                                        (function() {
+                                                            var sel = window.getSelection().toString().trim();
+                                                            if (sel.length > 5) return sel;
+                                                            var q = document.querySelector('.question, .de-bai, .cau-hoi, article, main, h1, h2, p');
+                                                            return q ? q.innerText.trim() : document.body.innerText.substring(0, 300);
+                                                        })();
+                                                        """.trimIndent()
+                                                    ) { res ->
+                                                        val clean = res?.removePrefix("\"")?.removeSuffix("\"")?.replace("\\n", " ")?.replace("\\\"", "\"")?.trim() ?: ""
+                                                        if (clean.isNotBlank() && clean != "null") {
+                                                            val query = clean.take(120)
+                                                            onOpenInBrowserTab("https://www.google.com/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}")
+                                                            onDismiss()
+                                                        } else {
+                                                            onOpenInBrowserTab("https://www.google.com/search?q=giai+bai+tap+online")
+                                                            onDismiss()
+                                                        }
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                                shape = RoundedCornerShape(4.dp),
+                                                modifier = Modifier.weight(1.3f)
+                                            ) {
+                                                Text("🔍 Tìm Lời Giải Ngay", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }

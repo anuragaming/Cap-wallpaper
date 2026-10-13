@@ -1,9 +1,13 @@
 package com.example.viewmodel
 
+import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
+import com.example.data.local.HistoryEntry
+import com.example.data.repository.HistoryRepository
 import com.example.engine.GeminiSolverService
 import com.example.model.BrowserTab
 import com.example.model.ConsoleLogItem
@@ -11,9 +15,12 @@ import com.example.model.InterceptionLog
 import com.example.model.NetworkRequestItem
 import com.example.model.ShieldConfig
 import com.example.model.ShieldStats
+import com.example.util.BrowserStorageHelper
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -24,7 +31,15 @@ enum class AppScreen {
     SETTINGS
 }
 
-class AntiReturnViewModel : ViewModel() {
+class AntiReturnViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val historyRepo = HistoryRepository(AppDatabase.getDatabase(application).historyDao())
+
+    val historyList: StateFlow<List<HistoryEntry>> = historyRepo.allHistory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isHistoryOpen = MutableStateFlow(false)
+    val isHistoryOpen: StateFlow<Boolean> = _isHistoryOpen.asStateFlow()
 
     private val _shieldConfig = MutableStateFlow(ShieldConfig())
     val shieldConfig: StateFlow<ShieldConfig> = _shieldConfig.asStateFlow()
@@ -65,6 +80,20 @@ class AntiReturnViewModel : ViewModel() {
 
     private val _pageTitle = MutableStateFlow("Nhật Anh DEV")
     val pageTitle: StateFlow<String> = _pageTitle.asStateFlow()
+
+    init {
+        // Restore saved tabs from disk like Chrome
+        val (savedTabs, savedActiveId) = BrowserStorageHelper.loadSavedTabs(application)
+        if (savedTabs.isNotEmpty()) {
+            _tabs.value = savedTabs
+            val targetActiveId = savedActiveId ?: savedTabs.first().id
+            _activeTabId.value = targetActiveId
+            val activeTab = savedTabs.find { it.id == targetActiveId } ?: savedTabs.first()
+            _currentLoadedUrl.value = activeTab.url
+            _urlInput.value = activeTab.url
+            _pageTitle.value = activeTab.title
+        }
+    }
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -208,6 +237,7 @@ class AntiReturnViewModel : ViewModel() {
                 else tab
             }
         }
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
     }
 
     // -----------------------------------------------------------------
@@ -227,6 +257,7 @@ class AntiReturnViewModel : ViewModel() {
         _activePageBlockedCount.value = 0
         _isTabSwitcherVisible.value = false
         _currentScreen.value = AppScreen.BROWSER
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
     }
 
     fun switchTab(tabId: String) {
@@ -238,6 +269,7 @@ class AntiReturnViewModel : ViewModel() {
         _activePageBlockedCount.value = 0
         _isTabSwitcherVisible.value = false
         _currentScreen.value = AppScreen.BROWSER
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
     }
 
     fun closeTab(tabId: String) {
@@ -250,6 +282,7 @@ class AntiReturnViewModel : ViewModel() {
             _currentLoadedUrl.value = freshTab.url
             _urlInput.value = freshTab.url
             _pageTitle.value = freshTab.title
+            BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
             return
         }
 
@@ -263,6 +296,7 @@ class AntiReturnViewModel : ViewModel() {
             _urlInput.value = nextTab.url
             _pageTitle.value = nextTab.title
         }
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
     }
 
     fun closeAllTabs(isIncognitoOnly: Boolean? = null) {
@@ -288,10 +322,34 @@ class AntiReturnViewModel : ViewModel() {
             _urlInput.value = nextTab.url
             _pageTitle.value = nextTab.title
         }
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
     }
 
     fun setTabSwitcherVisible(visible: Boolean) {
         _isTabSwitcherVisible.value = visible
+    }
+
+    // -----------------------------------------------------------------
+    // Web History Actions
+    // -----------------------------------------------------------------
+    fun openHistory() {
+        _isHistoryOpen.value = true
+    }
+
+    fun closeHistory() {
+        _isHistoryOpen.value = false
+    }
+
+    fun deleteHistoryEntry(entry: HistoryEntry) {
+        viewModelScope.launch {
+            historyRepo.delete(entry)
+        }
+    }
+
+    fun clearAllHistory() {
+        viewModelScope.launch {
+            historyRepo.clearAll()
+        }
     }
 
     // -----------------------------------------------------------------
@@ -321,6 +379,19 @@ class AntiReturnViewModel : ViewModel() {
                 else tab
             }
         }
+
+        // Record history for regular (non-incognito) tabs
+        val activeTab = _tabs.value.find { it.id == activeId }
+        val isIncognito = activeTab?.isIncognito ?: false
+        if (!isIncognito && url.isNotBlank()) {
+            viewModelScope.launch {
+                historyRepo.addHistory(url, cleanTitle)
+            }
+        }
+
+        // Sync tabs and cookies to disk
+        BrowserStorageHelper.saveTabs(getApplication(), _tabs.value, _activeTabId.value)
+        BrowserStorageHelper.syncCookies()
     }
 
     // -----------------------------------------------------------------

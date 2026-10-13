@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
                 val isLensLoading by viewModel.isLensLoading.collectAsStateWithLifecycle()
                 val lensError by viewModel.lensError.collectAsStateWithLifecycle()
                 val triggerLensCapture by viewModel.triggerLensCapture.collectAsStateWithLifecycle()
+                val historyList by viewModel.historyList.collectAsStateWithLifecycle()
+                val isHistoryOpen by viewModel.isHistoryOpen.collectAsStateWithLifecycle()
 
                 // System Back button handling
                 BackHandler(enabled = currentScreen != AppScreen.BROWSER) {
@@ -148,7 +150,13 @@ class MainActivity : ComponentActivity() {
                                 onScreenshotCaptured = viewModel::onScreenshotCaptured,
                                 onCloseGoogleLens = viewModel::closeGoogleLens,
                                 onGoogleLensTabSelected = viewModel::setGoogleLensTab,
-                                onExecuteLensAction = { ctx, mode -> viewModel.executeLensAction(ctx, mode) }
+                                onExecuteLensAction = { ctx, mode -> viewModel.executeLensAction(ctx, mode) },
+                                isHistoryOpen = isHistoryOpen,
+                                historyList = historyList,
+                                onOpenHistory = viewModel::openHistory,
+                                onCloseHistory = viewModel::closeHistory,
+                                onDeleteHistoryEntry = viewModel::deleteHistoryEntry,
+                                onClearAllHistory = viewModel::clearAllHistory
                             )
 
                             AppScreen.SHIELD_DASHBOARD -> ShieldDashboardScreen(

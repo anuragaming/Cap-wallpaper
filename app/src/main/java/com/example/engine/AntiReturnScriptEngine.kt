@@ -49,8 +49,11 @@ object AntiReturnScriptEngine {
                     }
                 }
 
-                // Suppress window blur & focusout in capture phase
+                // Suppress window blur & focusout in capture phase (excluding form input fields)
                 window.addEventListener('blur', function(e) {
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) {
+                        return; // Let user focus and type in inputs without interruption
+                    }
                     if (e.target === window || e.target === document) {
                         e.stopImmediatePropagation();
                         e.stopPropagation();
@@ -59,6 +62,9 @@ object AntiReturnScriptEngine {
                 }, true);
 
                 window.addEventListener('focusout', function(e) {
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) {
+                        return; // Let user focus and type in inputs without interruption
+                    }
                     if (e.target === window || e.target === document) {
                         e.stopImmediatePropagation();
                         e.stopPropagation();
