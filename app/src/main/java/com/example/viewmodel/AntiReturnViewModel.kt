@@ -1,6 +1,7 @@
 package com.example.viewmodel
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.engine.GeminiSolverService
@@ -112,6 +113,37 @@ class AntiReturnViewModel : ViewModel() {
 
     private val _pageExtractedContext = MutableStateFlow<String?>(null)
     val pageExtractedContext: StateFlow<String?> = _pageExtractedContext.asStateFlow()
+
+    // -----------------------------------------------------------------
+    // Google Lens In-Browser State (Screenshot, OCR, Solver & Search)
+    // Lưu trong bộ nhớ trình duyệt, KHÔNG lưu ra thư viện ảnh của máy
+    // -----------------------------------------------------------------
+    private val _capturedScreenshot = MutableStateFlow<Bitmap?>(null)
+    val capturedScreenshot: StateFlow<Bitmap?> = _capturedScreenshot.asStateFlow()
+
+    private val _isGoogleLensOpen = MutableStateFlow(false)
+    val isGoogleLensOpen: StateFlow<Boolean> = _isGoogleLensOpen.asStateFlow()
+
+    private val _googleLensActiveTab = MutableStateFlow("SOLVE") // "SOLVE", "OCR", "SEARCH"
+    val googleLensActiveTab: StateFlow<String> = _googleLensActiveTab.asStateFlow()
+
+    private val _lensCustomPrompt = MutableStateFlow("")
+    val lensCustomPrompt: StateFlow<String> = _lensCustomPrompt.asStateFlow()
+
+    private val _lensAiSolution = MutableStateFlow("")
+    val lensAiSolution: StateFlow<String> = _lensAiSolution.asStateFlow()
+
+    private val _lensOcrText = MutableStateFlow("")
+    val lensOcrText: StateFlow<String> = _lensOcrText.asStateFlow()
+
+    private val _isLensLoading = MutableStateFlow(false)
+    val isLensLoading: StateFlow<Boolean> = _isLensLoading.asStateFlow()
+
+    private val _lensError = MutableStateFlow<String?>(null)
+    val lensError: StateFlow<String?> = _lensError.asStateFlow()
+
+    private val _triggerLensCapture = MutableStateFlow(false)
+    val triggerLensCapture: StateFlow<Boolean> = _triggerLensCapture.asStateFlow()
 
     fun navigateToScreen(screen: AppScreen) {
         _currentScreen.value = screen
@@ -363,13 +395,20 @@ class AntiReturnViewModel : ViewModel() {
     }
 
     fun addConsoleLog(level: String, message: String, source: String = "") {
-        val item = ConsoleLogItem(level = level, message = message, source = source)
-        _consoleLogs.update { (listOf(item) + it).take(200) }
+        // Only log if DevTools is active to conserve UI performance
+        if (_isDevToolsOpen.value) {
+            val item = ConsoleLogItem(level = level, message = message, source = source)
+            _consoleLogs.update { (listOf(item) + it).take(100) }
+        }
     }
 
     fun addNetworkRequest(url: String, method: String = "GET", type: String = "RESOURCE") {
-        val item = NetworkRequestItem(url = url, method = method, type = type)
-        _networkLogs.update { (listOf(item) + it).take(200) }
+        // Critical performance optimization: only collect resource logs if DevTools is actively open
+        // This prevents hundreds of recompositions per second during web loading
+        if (_isDevToolsOpen.value) {
+            val item = NetworkRequestItem(url = url, method = method, type = type)
+            _networkLogs.update { (listOf(item) + it).take(100) }
+        }
     }
 
     fun clearDevToolsLogs() {
@@ -426,6 +465,72 @@ class AntiReturnViewModel : ViewModel() {
                 _geminiSolution.value = solution
             }.onFailure { err ->
                 _geminiError.value = err.message ?: "Đã xảy ra lỗi khi gọi Gemini."
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Google Lens In-Browser Methods (Capture, OCR, Solver & Search)
+    // -----------------------------------------------------------------
+    fun requestLensCapture() {
+        _triggerLensCapture.value = true
+    }
+
+    fun onScreenshotCaptured(bitmap: Bitmap?, openLens: Boolean = true) {
+        _triggerLensCapture.value = false
+        _capturedScreenshot.value = bitmap
+        if (openLens && bitmap != null) {
+            _isGoogleLensOpen.value = true
+            _lensError.value = null
+        }
+    }
+
+    fun openGoogleLens() {
+        _lensError.value = null
+        _isGoogleLensOpen.value = true
+    }
+
+    fun closeGoogleLens() {
+        _isGoogleLensOpen.value = false
+    }
+
+    fun setGoogleLensTab(tab: String) {
+        _googleLensActiveTab.value = tab
+    }
+
+    fun setLensCustomPrompt(prompt: String) {
+        _lensCustomPrompt.value = prompt
+    }
+
+    fun clearLensError() {
+        _lensError.value = null
+    }
+
+    fun executeLensAction(context: Context, mode: String = _googleLensActiveTab.value) {
+        val screenshot = _capturedScreenshot.value
+        if (screenshot == null) {
+            _lensError.value = "Chưa có ảnh chụp màn hình trình duyệt. Vui lòng bấm 'Chụp màn hình' để bắt đầu."
+            return
+        }
+
+        _isLensLoading.value = true
+        _lensError.value = null
+
+        viewModelScope.launch {
+            val result = GeminiSolverService.analyzeImageWithGemini(
+                context = context,
+                bitmap = screenshot,
+                prompt = _lensCustomPrompt.value,
+                mode = mode
+            )
+            _isLensLoading.value = false
+            result.onSuccess { text ->
+                when (mode) {
+                    "OCR" -> _lensOcrText.value = text
+                    else -> _lensAiSolution.value = text
+                }
+            }.onFailure { err ->
+                _lensError.value = err.message ?: "Lỗi khi xử lý hình ảnh với Google Lens."
             }
         }
     }

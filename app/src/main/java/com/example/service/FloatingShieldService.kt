@@ -239,15 +239,48 @@ class FloatingShieldService : Service() {
         }
         panel.addView(statusText)
 
-        // Button: Gemini Homework Solver / Search Overlay
-        val geminiBtn = TextView(this).apply {
-            text = "✨ Gemini - Giải Bài Tập / Tra Cứu"
+        // Button 1: Normal Screenshot & On-device AI (Gemini, Lens, etc. - Zero API cost)
+        val lensBtn = TextView(this).apply {
+            text = "📸 Chụp Màn Hình & Dùng AI Trên Máy (Free)"
             setTextColor(Color.WHITE)
             textSize = 12f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             val btnPad = (10 * density).toInt()
             setPadding(btnPad, btnPad, btnPad, btnPad)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 10 * density
+                setColor(Color.parseColor("#059669"))
+                setStroke((1.5f * density).toInt(), Color.parseColor("#10B981"))
+            }
+            setOnClickListener {
+                val intent = Intent(this@FloatingShieldService, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("extra_trigger_lens_capture", true)
+                }
+                startActivity(intent)
+                toggleExpanded(false)
+            }
+        }
+        panel.addView(lensBtn)
+
+        // Button 2: Gemini Homework Solver / Search Overlay
+        val geminiBtn = TextView(this).apply {
+            text = "✨ Gemini - Hỏi Đáp / Giải Bài Text"
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            val btnPad = (9 * density).toInt()
+            setPadding(btnPad, btnPad, btnPad, btnPad)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, (6 * density).toInt(), 0, 0)
+            }
+            layoutParams = lp
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 10 * density

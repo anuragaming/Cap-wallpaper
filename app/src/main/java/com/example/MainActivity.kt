@@ -21,6 +21,7 @@ import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ShieldDashboardScreen
 import com.example.ui.theme.AntiReturnTheme
 import com.example.ui.theme.CyberDarkNavy
+import com.example.util.ScreenCaptureHelper
 import com.example.viewmodel.AntiReturnViewModel
 import com.example.viewmodel.AppScreen
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_GEMINI = "extra_open_gemini"
+        const val EXTRA_TRIGGER_LENS_CAPTURE = "extra_trigger_lens_capture"
     }
 
     private val viewModel: AntiReturnViewModel by viewModels()
@@ -69,6 +71,16 @@ class MainActivity : ComponentActivity() {
                 val isGeminiLoading by viewModel.isGeminiLoading.collectAsStateWithLifecycle()
                 val geminiError by viewModel.geminiError.collectAsStateWithLifecycle()
 
+                // Google Lens state
+                val capturedScreenshot by viewModel.capturedScreenshot.collectAsStateWithLifecycle()
+                val isGoogleLensOpen by viewModel.isGoogleLensOpen.collectAsStateWithLifecycle()
+                val googleLensActiveTab by viewModel.googleLensActiveTab.collectAsStateWithLifecycle()
+                val lensAiSolution by viewModel.lensAiSolution.collectAsStateWithLifecycle()
+                val lensOcrText by viewModel.lensOcrText.collectAsStateWithLifecycle()
+                val isLensLoading by viewModel.isLensLoading.collectAsStateWithLifecycle()
+                val lensError by viewModel.lensError.collectAsStateWithLifecycle()
+                val triggerLensCapture by viewModel.triggerLensCapture.collectAsStateWithLifecycle()
+
                 // System Back button handling
                 BackHandler(enabled = currentScreen != AppScreen.BROWSER) {
                     viewModel.navigateToScreen(AppScreen.BROWSER)
@@ -102,6 +114,14 @@ class MainActivity : ComponentActivity() {
                                 geminiSolution = geminiSolution,
                                 isGeminiLoading = isGeminiLoading,
                                 geminiError = geminiError,
+                                capturedScreenshot = capturedScreenshot,
+                                isGoogleLensOpen = isGoogleLensOpen,
+                                googleLensActiveTab = googleLensActiveTab,
+                                lensAiSolution = lensAiSolution,
+                                lensOcrText = lensOcrText,
+                                isLensLoading = isLensLoading,
+                                lensError = lensError,
+                                triggerLensCapture = triggerLensCapture,
                                 onUrlInputChanged = viewModel::updateUrlInput,
                                 onNavigate = viewModel::navigateToUrl,
                                 onPageStarted = viewModel::onPageLoadStarted,
@@ -124,7 +144,11 @@ class MainActivity : ComponentActivity() {
                                     if (open) viewModel.openGeminiOverlay() else viewModel.closeGeminiOverlay()
                                 },
                                 onGeminiPromptChanged = viewModel::setGeminiPrompt,
-                                onExecuteGeminiSolve = { ctx, mode -> viewModel.executeGeminiSolve(ctx, mode) }
+                                onExecuteGeminiSolve = { ctx, mode -> viewModel.executeGeminiSolve(ctx, mode) },
+                                onScreenshotCaptured = viewModel::onScreenshotCaptured,
+                                onCloseGoogleLens = viewModel::closeGoogleLens,
+                                onGoogleLensTabSelected = viewModel::setGoogleLensTab,
+                                onExecuteLensAction = { ctx, mode -> viewModel.executeLensAction(ctx, mode) }
                             )
 
                             AppScreen.SHIELD_DASHBOARD -> ShieldDashboardScreen(
@@ -165,6 +189,15 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(EXTRA_OPEN_GEMINI, false) == true) {
             viewModel.navigateToScreen(AppScreen.BROWSER)
             viewModel.openGeminiOverlay()
+        }
+
+        if (intent?.getBooleanExtra(EXTRA_TRIGGER_LENS_CAPTURE, false) == true) {
+            viewModel.navigateToScreen(AppScreen.BROWSER)
+            window.decorView.post {
+                ScreenCaptureHelper.captureActivityScreenshot(this) { bmp ->
+                    viewModel.onScreenshotCaptured(bmp, true)
+                }
+            }
         }
     }
 }

@@ -1,11 +1,13 @@
 package com.example.ui.screens
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.view.View
+import com.example.util.ScreenCaptureHelper
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
@@ -68,6 +70,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.R
 import com.example.engine.AntiReturnJsBridge
 import com.example.engine.AntiReturnScriptEngine
 import com.example.model.BrowserTab
@@ -98,6 +103,7 @@ import com.example.ui.components.AntiReturnWebView
 import com.example.ui.components.ChromeTabSwitcher
 import com.example.ui.components.DevToolsSheet
 import com.example.ui.components.GeminiAssistantDialog
+import com.example.ui.components.GoogleLensSheet
 import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.CyberDarkNavy
 import com.example.ui.theme.CyberGreen
@@ -130,6 +136,14 @@ fun BrowserScreen(
     geminiSolution: String,
     isGeminiLoading: Boolean,
     geminiError: String?,
+    capturedScreenshot: Bitmap? = null,
+    isGoogleLensOpen: Boolean = false,
+    googleLensActiveTab: String = "SOLVE",
+    lensAiSolution: String = "",
+    lensOcrText: String = "",
+    isLensLoading: Boolean = false,
+    lensError: String? = null,
+    triggerLensCapture: Boolean = false,
     onUrlInputChanged: (String) -> Unit,
     onNavigate: (String) -> Unit,
     onPageStarted: (String) -> Unit,
@@ -151,6 +165,10 @@ fun BrowserScreen(
     onSetGeminiOverlayOpen: (Boolean) -> Unit,
     onGeminiPromptChanged: (String) -> Unit,
     onExecuteGeminiSolve: (Context, String) -> Unit,
+    onScreenshotCaptured: (Bitmap?, Boolean) -> Unit = { _, _ -> },
+    onCloseGoogleLens: () -> Unit = {},
+    onGoogleLensTabSelected: (String) -> Unit = {},
+    onExecuteLensAction: (Context, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -158,6 +176,26 @@ fun BrowserScreen(
     var showShieldSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var isEditingUrl by remember { mutableStateOf(false) }
+
+    val activity = context as? Activity
+    val captureNormalScreen: () -> Unit = {
+        if (activity != null) {
+            ScreenCaptureHelper.captureActivityScreenshot(activity) { bmp ->
+                val finalBmp = bmp ?: captureWebView(webViewRef)
+                onScreenshotCaptured(finalBmp, true)
+            }
+        } else {
+            val bmp = captureWebView(webViewRef)
+            onScreenshotCaptured(bmp, true)
+        }
+    }
+
+    // Auto-capture standard screenshot when triggered (e.g. from Floating Shield button)
+    LaunchedEffect(triggerLensCapture) {
+        if (triggerLensCapture) {
+            captureNormalScreen()
+        }
+    }
 
     val sheetState = rememberModalBottomSheetState()
     val activeTab = remember(tabs, activeTabId) {
@@ -350,6 +388,23 @@ fun BrowserScreen(
 
                     Spacer(modifier = Modifier.width(4.dp))
 
+                    // 🔍 Google Lens Button (One-click capture & OCR / Solve / Search)
+                    IconButton(
+                        onClick = { captureNormalScreen() },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("chrome_google_lens_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_google_lens),
+                            contentDescription = "Google Lens & OCR",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(2.dp))
+
                     // ✨ Gemini AI Quick Solver Button (Solves exercises directly on the page!)
                     IconButton(
                         onClick = { onSetGeminiOverlayOpen(true) },
@@ -438,7 +493,23 @@ fun BrowserScreen(
                             HorizontalDivider(color = Color(0xFF374151), modifier = Modifier.padding(vertical = 4.dp))
 
                             DropdownMenuItem(
-                                text = { Text("✨ Trợ lý Gemini (Giải bài tập)", color = CyberCyan, fontWeight = FontWeight.SemiBold) },
+                                text = { Text("🔍 Google Lens (Chụp & Giải / OCR)", color = Color(0xFF38BDF8), fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_google_lens),
+                                        contentDescription = null,
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    captureNormalScreen()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("✨ Trợ lý Gemini (Giải bài text)", color = CyberCyan, fontWeight = FontWeight.SemiBold) },
                                 leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = CyberCyan) },
                                 onClick = {
                                     showMenu = false
@@ -559,7 +630,8 @@ fun BrowserScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
 
-                            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                            // Hardware GPU acceleration enabled for 60-120fps smooth scrolling
+                            setLayerType(View.LAYER_TYPE_NONE, null)
 
                             settings.apply {
                                 javaScriptEnabled = true
@@ -598,7 +670,10 @@ fun BrowserScreen(
 
                                 override fun onLoadResource(view: WebView?, url: String?) {
                                     super.onLoadResource(view, url)
-                                    url?.let { onAddNetworkLog(it, "GET", "RESOURCE") }
+                                    // Only log network resources when DevTools is actually open to prevent continuous recompositions
+                                    if (isDevToolsOpen && url != null) {
+                                        onAddNetworkLog(url, "GET", "RESOURCE")
+                                    }
                                 }
 
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -839,4 +914,45 @@ fun BrowserScreen(
             onDismiss = { onSetGeminiOverlayOpen(false) }
         )
     }
+
+    // ==========================================
+    // 6. GOOGLE LENS IN-BROWSER SHEET
+    // ==========================================
+    GoogleLensSheet(
+        isOpen = isGoogleLensOpen,
+        screenshot = capturedScreenshot,
+        activeTab = googleLensActiveTab,
+        solution = lensAiSolution,
+        ocrText = lensOcrText,
+        isLoading = isLensLoading,
+        errorMessage = lensError,
+        onDismiss = onCloseGoogleLens,
+        onTabSelected = onGoogleLensTabSelected,
+        onRetakeScreenshot = {
+            captureNormalScreen()
+        },
+        onExecuteAction = onExecuteLensAction,
+        onOpenInBrowserTab = { url ->
+            onNewTab(false)
+            onNavigate(url)
+        }
+    )
 }
+
+/**
+ * Capture visible WebView area into an in-memory Bitmap.
+ * Saved in browser internal memory only, NOT saved to device gallery/external photos.
+ */
+private fun captureWebView(webView: WebView?): Bitmap? {
+    if (webView == null || webView.width <= 0 || webView.height <= 0) return null
+    return try {
+        val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        webView.draw(canvas)
+        bitmap
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        null
+    }
+}
+
