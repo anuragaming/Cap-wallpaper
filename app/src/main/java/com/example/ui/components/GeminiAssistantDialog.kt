@@ -97,6 +97,7 @@ fun GeminiAssistantDialog(
 
     var currentMode by remember { mutableStateOf("SOLVE") } // "SOLVE", "SEARCH", "SUMMARIZE", "EXPLAIN"
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var selectedModel by remember { mutableStateOf(GeminiSolverService.getSelectedModel(context)) }
     var apiKeyInput by remember { mutableStateOf(GeminiSolverService.getApiKey(context)) }
 
     ModalBottomSheet(
@@ -149,10 +150,21 @@ fun GeminiAssistantDialog(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(Color(0xFF1E293B))
+                                    .border(0.5.dp, CyberCyan, RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        val newModel = if (selectedModel == GeminiSolverService.MODEL_FLASH) {
+                                            GeminiSolverService.MODEL_FLASH_LITE
+                                        } else {
+                                            GeminiSolverService.MODEL_FLASH
+                                        }
+                                        selectedModel = newModel
+                                        GeminiSolverService.setSelectedModel(context, newModel)
+                                        Toast.makeText(context, "Đã chọn: $newModel", Toast.LENGTH_SHORT).show()
+                                    }
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "3.5 Flash",
+                                    text = if (selectedModel == GeminiSolverService.MODEL_FLASH) "3.5 Flash" else "3.1 Flash-Lite (Tiết kiệm)",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = CyberCyan

@@ -20,7 +20,9 @@ object GeminiSolverService {
 
     private const val PREFS_NAME = "gemini_prefs"
     private const val PREF_CUSTOM_API_KEY = "custom_gemini_api_key"
-    private const val MODEL_NAME = "gemini-3.5-flash"
+    private const val PREF_SELECTED_MODEL = "selected_gemini_model"
+    const val MODEL_FLASH = "gemini-3.5-flash"
+    const val MODEL_FLASH_LITE = "gemini-3.1-flash-lite-preview"
     private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -45,6 +47,16 @@ object GeminiSolverService {
     fun saveCustomApiKey(context: Context, key: String) {
         val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(PREF_CUSTOM_API_KEY, key.trim()).apply()
+    }
+
+    fun getSelectedModel(context: Context): String {
+        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(PREF_SELECTED_MODEL, MODEL_FLASH) ?: MODEL_FLASH
+    }
+
+    fun setSelectedModel(context: Context, model: String) {
+        val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(PREF_SELECTED_MODEL, model).apply()
     }
 
     /**
@@ -105,7 +117,8 @@ object GeminiSolverService {
                 })
             }
 
-            val url = "$BASE_URL/$MODEL_NAME:generateContent?key=$apiKey"
+            val modelName = getSelectedModel(context)
+            val url = "$BASE_URL/$modelName:generateContent?key=$apiKey"
             val body = requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
             val request = Request.Builder()
@@ -209,7 +222,8 @@ object GeminiSolverService {
                 })
             }
 
-            val url = "$BASE_URL/$MODEL_NAME:generateContent?key=$apiKey"
+            val modelName = getSelectedModel(context)
+            val url = "$BASE_URL/$modelName:generateContent?key=$apiKey"
             val body = requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
             val request = Request.Builder()

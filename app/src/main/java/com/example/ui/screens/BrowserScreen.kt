@@ -935,6 +935,11 @@ fun BrowserScreen(
         onOpenInBrowserTab = { url ->
             onNewTab(false)
             onNavigate(url)
+        },
+        webView = webViewRef,
+        onOpenGeminiWithPrompt = { text ->
+            onGeminiPromptChanged(text)
+            onSetGeminiOverlayOpen(true)
         }
     )
 }

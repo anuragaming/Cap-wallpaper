@@ -239,9 +239,9 @@ class FloatingShieldService : Service() {
         }
         panel.addView(statusText)
 
-        // Button 1: Normal Screenshot & On-device AI (Gemini, Lens, etc. - Zero API cost)
+        // Button 1: Screenshot & Instant Solve in Browser (No Exit)
         val lensBtn = TextView(this).apply {
-            text = "📸 Chụp Màn Hình & Dùng AI Trên Máy (Free)"
+            text = "📸 Chụp & Giải Ngay Trong Web (Lens AI)"
             setTextColor(Color.WHITE)
             textSize = 12f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -265,9 +265,9 @@ class FloatingShieldService : Service() {
         }
         panel.addView(lensBtn)
 
-        // Button 2: Gemini Homework Solver / Search Overlay
+        // Button 2: Gemini Homework Solver / Assistant in Browser
         val geminiBtn = TextView(this).apply {
-            text = "✨ Gemini - Hỏi Đáp / Giải Bài Text"
+            text = "✨ Trợ Lý Gemini - Giải Đề & Tìm Kiếm"
             setTextColor(Color.WHITE)
             textSize = 12f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
