@@ -1,21 +1,9 @@
 <resources>
-    <string name="app_name">SnapShare</string>
-    <string name="notification_channel_name">SnapShare Service</string>
-    <string name="notification_channel_desc">Dịch vụ chụp nhanh màn hình khi mở ứng dụng</string>
-    <string name="service_running_title">SnapShare đang hoạt động</string>
-    <string name="service_running_text">Chạm icon ứng dụng để chụp và copy ảnh vào bàn phím</string>
-    <string name="action_stop">Dừng dịch vụ</string>
-    <string name="action_share">Chia sẻ</string>
-    <string name="action_delete">Xóa ảnh tạm</string>
-    <string name="screenshot_captured">Đã copy ảnh vào bộ nhớ tạm</string>
-    <string name="screenshot_captured_desc">Mở bàn phím để dán ảnh chụp màn hình vào tin nhắn hoặc ghi chú</string>
-    <string name="clipboard_label">Ảnh chụp màn hình</string>
-    <string name="toast_copied_to_clipboard">Đã copy ảnh vào bộ nhớ tạm (bàn phím)!</string>
-    <string name="permission_screen_capture_title">Quyền chụp màn hình</string>
-    <string name="permission_screen_capture_desc">Cấp quyền chụp màn hình để SnapShare có thể chụp ngay khi bạn chạm vào ứng dụng.</string>
-    <string name="permission_screen_capture_button">Bắt đầu cấp quyền</string>
-    <string name="permission_notification_title">Quyền thông báo</string>
-    <string name="permission_notification_desc">Cần quyền thông báo để duy trì dịch vụ chụp màn hình trong nền.</string>
-    <string name="share_screenshot_title">Chia sẻ ảnh chụp màn hình</string>
-    <string name="toast_screenshot_success">Đã chụp ảnh màn hình!</string>
+    <string name="app_name">Nhật Anh browser</string>
+    <string name="title_anti_return_detector">Nhật Anh browser</string>
+    <string name="subtitle_detector_shield">Chặn theo dõi tab, quay lại &amp; phát hiện rời trang</string>
+    <string name="shield_active">ĐANG BẬT BẢO VỆ</string>
+    <string name="shield_inactive">ĐANG TẮT BẢO VỆ</string>
+    <string name="shield_status_protected">Trang web không thể phát hiện bạn rời tab hoặc quay lại</string>
+    <string name="shield_status_unprotected">Trang web có thể dùng Return Detector để theo dõi</string>
 </resources>

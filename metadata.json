@@ -1,6 +1,6 @@
 {
-  "name": "SnapShare",
-  "description": "Chụp màn hình nhanh với nút floating overlay camera và chia sẻ tức thì.",
+  "name": "Nhật Anh browser",
+  "description": "Chặn tính năng Return Detector của các trang web và trình duyệt, bảo vệ quyền riêng tư và duy trì hoạt động ngầm liên tục.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

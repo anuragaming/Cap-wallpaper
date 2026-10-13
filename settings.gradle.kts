@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "SnapShare"
+rootProject.name = "Nhật Anh browser"
 
 include(":app")

@@ -1,273 +1,170 @@
 package com.example
 
-import android.Manifest
-import android.app.Activity
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.media.projection.MediaProjectionConfig
-import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.example.ui.theme.MyApplicationTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.screens.BrowserScreen
+import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.ShieldDashboardScreen
+import com.example.ui.theme.AntiReturnTheme
+import com.example.ui.theme.CyberDarkNavy
+import com.example.viewmodel.AntiReturnViewModel
+import com.example.viewmodel.AppScreen
 
 class MainActivity : ComponentActivity() {
 
-    private val mediaProjectionManager by lazy {
-        getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    companion object {
+        const val EXTRA_OPEN_GEMINI = "extra_open_gemini"
     }
 
-    private var showPermissionCard by mutableStateOf(false)
-    private var permissionMessage by mutableStateOf("")
-
-    private val notificationLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        launchMediaProjectionPrompt()
-    }
-
-    private val mediaProjectionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            showPermissionCard = false
-            startServiceAndCapture(result.resultCode, result.data!!)
-        } else {
-            permissionMessage = "Cần cấp quyền chụp màn hình để SnapShare có thể chụp và copy ảnh ngay khi chạm vào app."
-            showPermissionCard = true
-        }
-    }
+    private val viewModel: AntiReturnViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // 1. If service is ALREADY active: Capture right now and finish immediately!
-        if (ScreenCaptureService.activeService != null) {
-            performInstantCaptureAndFinish()
-            return
-        }
-
-        // 2. If service is not active: Prompt permissions immediately (no extra button clicks needed)
-        startPermissionFlow()
+        handleIntent(intent)
 
         setContent {
-            MyApplicationTheme {
-                if (showPermissionCard) {
-                    PermissionPromptScreen(
-                        message = permissionMessage,
-                        onGrantClick = { launchMediaProjectionPrompt() }
-                    )
+            AntiReturnTheme {
+                val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
+                val shieldConfig by viewModel.shieldConfig.collectAsStateWithLifecycle()
+                val shieldStats by viewModel.shieldStats.collectAsStateWithLifecycle()
+                val logs by viewModel.logs.collectAsStateWithLifecycle()
+                val currentUrl by viewModel.currentLoadedUrl.collectAsStateWithLifecycle()
+                val urlInput by viewModel.urlInput.collectAsStateWithLifecycle()
+                val pageTitle by viewModel.pageTitle.collectAsStateWithLifecycle()
+                val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+                val canGoBack by viewModel.canGoBack.collectAsStateWithLifecycle()
+                val canGoForward by viewModel.canGoForward.collectAsStateWithLifecycle()
+                val blockedOnPage by viewModel.activePageBlockedCount.collectAsStateWithLifecycle()
+
+                // Tabs state
+                val tabs by viewModel.tabs.collectAsStateWithLifecycle()
+                val activeTabId by viewModel.activeTabId.collectAsStateWithLifecycle()
+                val isTabSwitcherVisible by viewModel.isTabSwitcherVisible.collectAsStateWithLifecycle()
+
+                // DevTools state
+                val isDevToolsOpen by viewModel.isDevToolsOpen.collectAsStateWithLifecycle()
+                val consoleLogs by viewModel.consoleLogs.collectAsStateWithLifecycle()
+                val networkLogs by viewModel.networkLogs.collectAsStateWithLifecycle()
+
+                // Gemini state
+                val isGeminiOverlayOpen by viewModel.isGeminiOverlayOpen.collectAsStateWithLifecycle()
+                val geminiPrompt by viewModel.geminiPrompt.collectAsStateWithLifecycle()
+                val geminiSolution by viewModel.geminiSolution.collectAsStateWithLifecycle()
+                val isGeminiLoading by viewModel.isGeminiLoading.collectAsStateWithLifecycle()
+                val geminiError by viewModel.geminiError.collectAsStateWithLifecycle()
+
+                // System Back button handling
+                BackHandler(enabled = currentScreen != AppScreen.BROWSER) {
+                    viewModel.navigateToScreen(AppScreen.BROWSER)
+                }
+
+                Scaffold(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing),
+                    containerColor = CyberDarkNavy
+                ) { innerPadding ->
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        when (currentScreen) {
+                            AppScreen.BROWSER -> BrowserScreen(
+                                currentUrl = currentUrl,
+                                urlInput = urlInput,
+                                pageTitle = pageTitle,
+                                isLoading = isLoading,
+                                canGoBack = canGoBack,
+                                canGoForward = canGoForward,
+                                blockedOnThisPage = blockedOnPage,
+                                config = shieldConfig,
+                                tabs = tabs,
+                                activeTabId = activeTabId,
+                                isTabSwitcherVisible = isTabSwitcherVisible,
+                                isDevToolsOpen = isDevToolsOpen,
+                                consoleLogs = consoleLogs,
+                                networkLogs = networkLogs,
+                                isGeminiOverlayOpen = isGeminiOverlayOpen,
+                                geminiPrompt = geminiPrompt,
+                                geminiSolution = geminiSolution,
+                                isGeminiLoading = isGeminiLoading,
+                                geminiError = geminiError,
+                                onUrlInputChanged = viewModel::updateUrlInput,
+                                onNavigate = viewModel::navigateToUrl,
+                                onPageStarted = viewModel::onPageLoadStarted,
+                                onPageFinished = viewModel::onPageLoadFinished,
+                                onBlockedEvent = viewModel::recordBlockedEvent,
+                                onToggleMaster = viewModel::setMasterShield,
+                                onToggleDesktopMode = viewModel::toggleDesktopMode,
+                                onOpenDashboard = { viewModel.navigateToScreen(AppScreen.SHIELD_DASHBOARD) },
+                                onOpenSettings = { viewModel.navigateToScreen(AppScreen.SETTINGS) },
+                                onNewTab = { isIncognito -> viewModel.openNewTab("https://anhdev.io.vn", isIncognito) },
+                                onSelectTab = viewModel::switchTab,
+                                onCloseTab = viewModel::closeTab,
+                                onCloseAllTabs = viewModel::closeAllTabs,
+                                onSetTabSwitcherVisible = viewModel::setTabSwitcherVisible,
+                                onSetDevToolsOpen = viewModel::setDevToolsOpen,
+                                onClearDevToolsLogs = viewModel::clearDevToolsLogs,
+                                onAddConsoleLog = viewModel::addConsoleLog,
+                                onAddNetworkLog = viewModel::addNetworkRequest,
+                                onSetGeminiOverlayOpen = { open ->
+                                    if (open) viewModel.openGeminiOverlay() else viewModel.closeGeminiOverlay()
+                                },
+                                onGeminiPromptChanged = viewModel::setGeminiPrompt,
+                                onExecuteGeminiSolve = { ctx, mode -> viewModel.executeGeminiSolve(ctx, mode) }
+                            )
+
+                            AppScreen.SHIELD_DASHBOARD -> ShieldDashboardScreen(
+                                config = shieldConfig,
+                                stats = shieldStats,
+                                logs = logs,
+                                onToggleMaster = viewModel::setMasterShield,
+                                onClearLogs = viewModel::clearLogs,
+                                onBackToBrowser = { viewModel.navigateToScreen(AppScreen.BROWSER) }
+                            )
+
+                            AppScreen.SETTINGS -> SettingsScreen(
+                                config = shieldConfig,
+                                onToggleDesktopMode = viewModel::toggleDesktopMode,
+                                onResetStats = viewModel::resetStats,
+                                onClearLogs = viewModel::clearLogs,
+                                onBackToBrowser = { viewModel.navigateToScreen(AppScreen.BROWSER) }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun startPermissionFlow() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            launchMediaProjectionPrompt()
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
     }
 
-    private fun launchMediaProjectionPrompt() {
-        try {
-            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val config = MediaProjectionConfig.createConfigForDefaultDisplay()
-                mediaProjectionManager.createScreenCaptureIntent(config)
-            } else {
-                mediaProjectionManager.createScreenCaptureIntent()
-            }
-            mediaProjectionLauncher.launch(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            permissionMessage = "Lỗi khi yêu cầu quyền chụp: ${e.message}"
-            showPermissionCard = true
-        }
-    }
-
-    private fun startServiceAndCapture(resultCode: Int, data: Intent) {
-        val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
-            action = ScreenCaptureService.ACTION_START
-            putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
-            putExtra(ScreenCaptureService.EXTRA_DATA, data)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+    private fun handleIntent(intent: Intent?) {
+        intent?.data?.let { uri ->
+            viewModel.navigateToUrl(uri.toString())
+            viewModel.navigateToScreen(AppScreen.BROWSER)
         }
 
-        lifecycleScope.launch {
-            // Wait for service to initialize VirtualDisplay
-            var waited = 0
-            while (ScreenCaptureService.activeService == null && waited < 1500) {
-                delay(50)
-                waited += 50
-            }
-            delay(100)
-            performInstantCaptureAndFinish()
-        }
-    }
-
-    private fun performInstantCaptureAndFinish() {
-        lifecycleScope.launch {
-            // Allow transient window transition to settle
-            delay(80)
-
-            val service = ScreenCaptureService.activeService
-            val bitmap = service?.captureFrame()
-
-            if (bitmap != null) {
-                val file = withContext(Dispatchers.IO) {
-                    FileHelper.saveBitmapToCache(applicationContext, bitmap)
-                }
-
-                if (file != null) {
-                    copyFileToClipboard(file)
-                    service.showScreenshotNotification(file, bitmap)
-                } else {
-                    Toast.makeText(applicationContext, "Lỗi khi lưu ảnh tạm", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(applicationContext, "Không thể chụp màn hình", Toast.LENGTH_SHORT).show()
-            }
-
-            finish()
-        }
-    }
-
-    private fun copyFileToClipboard(file: File) {
-        try {
-            val uri = FileHelper.getFileUri(this, file)
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clipData = ClipData(
-                ClipDescription(getString(R.string.clipboard_label), arrayOf("image/png")),
-                ClipData.Item(uri)
-            )
-            clipboard.setPrimaryClip(clipData)
-
-            triggerHapticFeedback()
-            Toast.makeText(
-                this,
-                getString(R.string.toast_copied_to_clipboard),
-                Toast.LENGTH_SHORT
-            ).show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Lỗi copy vào bộ nhớ tạm: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun triggerHapticFeedback() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager =
-                    getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(
-                        VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(40)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-}
-
-@Composable
-fun PermissionPromptScreen(
-    message: String = "",
-    onGrantClick: () -> Unit = {}
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "SnapShare - Chụp & Copy",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = message.ifEmpty {
-                        "Chạm vào icon ứng dụng để chụp và copy ảnh trực tiếp vào bàn phím."
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(
-                    onClick = onGrantClick
-                ) {
-                    Text("Bắt đầu cấp quyền")
-                }
-            }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_GEMINI, false) == true) {
+            viewModel.navigateToScreen(AppScreen.BROWSER)
+            viewModel.openGeminiOverlay()
         }
     }
 }
